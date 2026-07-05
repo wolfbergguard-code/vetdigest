@@ -1,0 +1,22 @@
+[Unit]
+Description=VetRadiometry weekly cardiology digest
+Documentation=https://github.com/wolfberg-guard/vetdigest
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=vetdigest
+Group=vetdigest
+WorkingDirectory=/opt/vetdigest
+EnvironmentFile=/opt/vetdigest/.env
+ExecStart=/opt/vetdigest/venv/bin/python /opt/vetdigest/vetdigest.py
+StandardOutput=append:/opt/vetdigest/data/logs/systemd.log
+StandardError=append:/opt/vetdigest/data/logs/systemd.log
+TimeoutStartSec=45min
+Nice=10
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/vetdigest/data
+PrivateTmp=yes

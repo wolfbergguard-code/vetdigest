@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly VetRadiometry digest — Monday 04:00 MSK
+
+[Timer]
+OnCalendar=Mon *-*-* 04:00:00 Europe/Moscow
+Persistent=true
+RandomizedDelaySec=60
+Unit=vetdigest.service
+
+[Install]
+WantedBy=timers.target
