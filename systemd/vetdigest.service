@@ -1,6 +1,6 @@
 [Unit]
 Description=VetRadiometry weekly cardiology digest
-Documentation=https://github.com/wolfberg-guard/vetdigest
+Documentation=https://github.com/wolfbergguard-code/vetdigest
 After=network-online.target
 Wants=network-online.target
 
@@ -13,7 +13,7 @@ EnvironmentFile=/opt/vetdigest/.env
 ExecStart=/opt/vetdigest/venv/bin/python /opt/vetdigest/vetdigest.py
 StandardOutput=append:/opt/vetdigest/data/logs/systemd.log
 StandardError=append:/opt/vetdigest/data/logs/systemd.log
-TimeoutStartSec=45min
+TimeoutStartSec=60min
 Nice=10
 NoNewPrivileges=yes
 ProtectSystem=strict

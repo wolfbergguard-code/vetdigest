@@ -69,6 +69,8 @@ if [[ -f "$BUNDLE_ROOT/vetdigest.py" ]]; then
     fi
     cp "$BUNDLE_ROOT/systemd/vetdigest.service" /etc/systemd/system/vetdigest.service
     cp "$BUNDLE_ROOT/systemd/vetdigest.timer"   /etc/systemd/system/vetdigest.timer
+    cp "$BUNDLE_ROOT/vetdigest_feedback.py" "$INSTALL_DIR/vetdigest_feedback.py"
+    cp "$BUNDLE_ROOT/systemd/vetdigest-feedback.service" /etc/systemd/system/vetdigest-feedback.service
 elif [[ -n "$REPO_URL" ]]; then
     msg "Клонирую $REPO_URL"
     apt-get install -y -qq git
@@ -81,6 +83,8 @@ elif [[ -n "$REPO_URL" ]]; then
     fi
     cp "$tmp/systemd/vetdigest.service" /etc/systemd/system/vetdigest.service
     cp "$tmp/systemd/vetdigest.timer"   /etc/systemd/system/vetdigest.timer
+    cp "$tmp/vetdigest_feedback.py" "$INSTALL_DIR/vetdigest_feedback.py"
+    cp "$tmp/systemd/vetdigest-feedback.service" /etc/systemd/system/vetdigest-feedback.service
     rm -rf "$tmp"
 else
     err "Не найден локальный vetdigest.py, и VETDIGEST_REPO_URL не задан."
@@ -116,7 +120,7 @@ if grep -q "pplx-XXX" "$INSTALL_DIR/.env"; then
     err "   sudo nano $INSTALL_DIR/.env"
     err ""
     err "Затем запустите таймер:"
-    err "   sudo systemctl start vetdigest.timer"
+    err "   sudo systemctl start vetdigest.timer && sudo systemctl enable --now vetdigest-feedback"
     err ""
     err "Проверьте статус:"
     err "   sudo systemctl list-timers vetdigest.timer"
@@ -128,6 +132,7 @@ if grep -q "pplx-XXX" "$INSTALL_DIR/.env"; then
 fi
 
 systemctl start vetdigest.timer
+systemctl enable --now vetdigest-feedback.service >/dev/null || true
 msg "✅ Таймер vetdigest.timer активирован"
 systemctl list-timers vetdigest.timer --no-pager || true
 

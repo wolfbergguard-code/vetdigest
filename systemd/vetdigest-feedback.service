@@ -1,0 +1,24 @@
+[Unit]
+Description=VetDigest — приём оценок из Telegram
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vetdigest
+Group=vetdigest
+WorkingDirectory=/opt/vetdigest
+EnvironmentFile=/opt/vetdigest/.env
+ExecStart=/opt/vetdigest/venv/bin/python /opt/vetdigest/vetdigest_feedback.py
+Restart=always
+RestartSec=30
+StandardOutput=append:/opt/vetdigest/data/logs/feedback-systemd.log
+StandardError=append:/opt/vetdigest/data/logs/feedback-systemd.log
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/vetdigest/data
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
