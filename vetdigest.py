@@ -1093,10 +1093,11 @@ def run_check(cfg: dict, logger: logging.Logger) -> int:
             ok = False
     if cfg["pplx_key"]:
         r = requests.post(PPLX_ENDPOINT, headers={"Authorization": f"Bearer {cfg['pplx_key']}"},
-                          json={"model": PPLX_MODEL, "max_tokens": 5, "disable_search": True,
+                          json={"model": PPLX_MODEL, "max_tokens": 32, "disable_search": True,
                                 "messages": [{"role": "user", "content": "ping"}]},
                           timeout=(8, 60))
-        print(("✓" if r.status_code == 200 else "✗") + f" Perplexity Sonar: HTTP {r.status_code}")
+        print(("✓" if r.status_code == 200 else "✗") + f" Perplexity Sonar: HTTP {r.status_code}"
+              + ("" if r.status_code == 200 else f" — {r.text[:200]}"))
         ok &= r.status_code == 200
     else:
         print("✗ PPLX_API_KEY пуст")
