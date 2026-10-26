@@ -1,0 +1,23 @@
+[Unit]
+Description=VetDigest — отложенная отправка выпуска во второй чат
+Documentation=https://github.com/wolfbergguard-code/vetdigest
+After=network-online.target vetdigest.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=vetdigest
+Group=vetdigest
+WorkingDirectory=/opt/vetdigest
+EnvironmentFile=/opt/vetdigest/.env
+ExecStart=/opt/vetdigest/venv/bin/python /opt/vetdigest/vetdigest.py --send-secondary
+StandardOutput=append:/opt/vetdigest/data/logs/systemd.log
+StandardError=append:/opt/vetdigest/data/logs/systemd.log
+TimeoutStartSec=20min
+Restart=on-failure
+RestartSec=10min
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/vetdigest/data
+PrivateTmp=yes

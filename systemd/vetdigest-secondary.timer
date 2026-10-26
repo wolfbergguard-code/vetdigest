@@ -1,0 +1,10 @@
+[Unit]
+Description=VetDigest — второй чат, понедельник 15:00 МСК
+
+[Timer]
+OnCalendar=Mon *-*-* 15:00:00 Europe/Moscow
+Persistent=true
+Unit=vetdigest-secondary.service
+
+[Install]
+WantedBy=timers.target

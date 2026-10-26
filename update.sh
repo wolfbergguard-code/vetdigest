@@ -24,9 +24,11 @@ install -m 644 "$SRC/.env.example" $D/.env.example
 install -m 644 "$SRC/systemd/vetdigest.service" /etc/systemd/system/vetdigest.service
 install -m 644 "$SRC/systemd/vetdigest.timer" /etc/systemd/system/vetdigest.timer
 install -m 644 "$SRC/systemd/vetdigest-feedback.service" /etc/systemd/system/vetdigest-feedback.service
+install -m 644 "$SRC/systemd/vetdigest-secondary.service" /etc/systemd/system/vetdigest-secondary.service
+install -m 644 "$SRC/systemd/vetdigest-secondary.timer" /etc/systemd/system/vetdigest-secondary.timer
 
 msg "Дописываю новые переменные в .env (существующие не трогаю)"
-for kv in "SECONDARY_CHAT_ID=" "S2_API_KEY=" "NCBI_API_KEY=" \
+for kv in "SECONDARY_CHAT_ID=" "SECONDARY_DELAYED=1" "S2_API_KEY=" "NCBI_API_KEY=" \
           "VETDIGEST_MAX_LLM=50" "VETDIGEST_MAX_CARDS=15" "VETDIGEST_MIN_SCORE=6"; do
   k=${kv%%=*}
   grep -q "^$k=" $D/.env || echo "$kv" >> $D/.env
@@ -40,11 +42,12 @@ chmod 600 $D/.env
 
 systemctl daemon-reload
 systemctl enable --now vetdigest.timer >/dev/null
+systemctl enable --now vetdigest-secondary.timer >/dev/null
 systemctl enable vetdigest-feedback.service >/dev/null
 systemctl restart vetdigest-feedback.service
 
 msg "Проверка доступов:"
 sudo -u vetdigest $D/venv/bin/python $D/vetdigest.py --check || true
 msg "Готово. Следующий запуск:"
-systemctl list-timers vetdigest.timer --no-pager | head -3
-msg "Откат: sudo cp $BK/vetdigest.py $D/ && sudo systemctl disable --now vetdigest-feedback"
+systemctl list-timers vetdigest.timer vetdigest-secondary.timer --no-pager | head -4
+msg "Откат: sudo cp $BK/vetdigest.py $D/ && sudo systemctl disable --now vetdigest-feedback vetdigest-secondary.timer"

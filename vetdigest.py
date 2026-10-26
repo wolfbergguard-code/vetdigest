@@ -74,6 +74,7 @@ STATS_FILE = DATA_DIR / "stats.json"
 CARDS_FILE = DATA_DIR / "cards.json"        # key -> метаданные карточки
 RATINGS_FILE = DATA_DIR / "ratings.json"    # key -> оценка пользователя
 LOCK_FILE = DATA_DIR / ".state.lock"
+SECONDARY_QUEUE_FILE = DATA_DIR / "secondary_queue.json"  # отложенная отправка во второй чат
 
 GLOBAL_BUDGET_SEC = 2400  # 40 минут на весь прогон
 CONNECT_TIMEOUT = 8
@@ -1128,7 +1129,45 @@ def load_cfg() -> dict:
         "tg_token": os.getenv("TELEGRAM_BOT_TOKEN", "").strip(),
         "tg_chat": os.getenv("TELEGRAM_CHAT_ID", "").strip(),
         "tg_chat2": os.getenv("SECONDARY_CHAT_ID", "").strip(),
+        # 1 = во второй чат не сразу, а очередью по отдельному таймеру (vetdigest-secondary.timer)
+        "chat2_delayed": os.getenv("SECONDARY_DELAYED", "1").strip() not in ("0", "false", "no", ""),
     }
+
+
+def send_secondary_queue(cfg: dict, logger: logging.Logger) -> int:
+    """Отправка отложенного выпуска во второй чат (таймер vetdigest-secondary)."""
+    with state_lock():
+        q = load_json(SECONDARY_QUEUE_FILE, {})
+    cards = q.get("cards") or []
+    if not cards:
+        logger.info("Очередь второго чата пуста — отправлять нечего")
+        return 0
+    chat = cfg["tg_chat2"] or q.get("chat", "")
+    if not (cfg["tg_token"] and chat):
+        logger.error("Не задан TELEGRAM_BOT_TOKEN или SECONDARY_CHAT_ID")
+        return 2
+    logger.info("Второй чат %s: отправляю %d карточек выпуска %s", chat, len(cards), q.get("date"))
+    sent = 0
+    left: list[list[str]] = []
+    for idx, msgs in enumerate(cards):
+        ok = True
+        for m in msgs:
+            if tg_send(cfg["tg_token"], chat, m, logger) is None:
+                ok = False
+                break
+            time.sleep(0.35)
+        if ok:
+            sent += 1
+        else:
+            left = cards[idx:]
+            break
+    with state_lock():
+        if left:
+            save_json(SECONDARY_QUEUE_FILE, {**q, "cards": left})
+        else:
+            SECONDARY_QUEUE_FILE.unlink(missing_ok=True)
+    logger.info("Второй чат: отправлено %d/%d", sent, len(cards))
+    return 0 if not left else 1
 
 
 def main() -> int:
@@ -1138,12 +1177,16 @@ def main() -> int:
     ap.add_argument("--no-llm", action="store_true")
     ap.add_argument("--no-s2", action="store_true")
     ap.add_argument("--window-days", type=int, default=DEFAULT_WINDOW_DAYS)
+    ap.add_argument("--send-secondary", action="store_true",
+                    help="отправить во второй чат выпуск, отложенный утренним прогоном")
     args = ap.parse_args()
 
     cfg = load_cfg()
-    logger = setup_logging("check" if args.check else "run")
+    logger = setup_logging("check" if args.check else ("secondary" if args.send_secondary else "run"))
     if args.check:
         return run_check(cfg, logger)
+    if args.send_secondary:
+        return send_secondary_queue(cfg, logger)
 
     logger.info("=== VetDigest v%s (dry_run=%s) ===", VERSION, args.dry_run)
 
@@ -1273,6 +1316,7 @@ def main() -> int:
         chat2_ok = False
 
     delivered = 0
+    queue2: list[list[str]] = []
     for a in selected:
         msgs = main_card_messages(a, NCBI_EMAIL)
         msg_id = None
@@ -1288,10 +1332,13 @@ def main() -> int:
         delivered += 1
 
         if chat2_ok:
-            for m in secondary_card_messages(a):
-                if tg_send(cfg["tg_token"], cfg["tg_chat2"], m, logger) is None:
-                    break
-                time.sleep(0.35)
+            if cfg["chat2_delayed"]:
+                queue2.append(secondary_card_messages(a))
+            else:
+                for m in secondary_card_messages(a):
+                    if tg_send(cfg["tg_token"], cfg["tg_chat2"], m, logger) is None:
+                        break
+                    time.sleep(0.35)
 
         with state_lock():
             cards = load_json(CARDS_FILE, {})
@@ -1315,6 +1362,12 @@ def main() -> int:
             "selected": len(selected), "delivered": delivered,
             "sonar_usd": round(cost.get("usd", 0.0), 4)})
         save_json(STATS_FILE, st)
+
+    if queue2:
+        with state_lock():
+            prev = load_json(SECONDARY_QUEUE_FILE, {}).get("cards") or []  # недоотправленное ранее
+            save_json(SECONDARY_QUEUE_FILE, {"date": maxdate, "chat": cfg["tg_chat2"], "cards": prev + queue2})
+        logger.info("Второй чат: %d карточек поставлено в очередь (отправка --send-secondary)", len(queue2))
 
     logger.info("✅ Доставлено %d/%d карточек", delivered, len(selected))
     return 0 if delivered == len(selected) else 1
