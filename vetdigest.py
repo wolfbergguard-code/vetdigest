@@ -1175,6 +1175,59 @@ def send_secondary_queue(cfg: dict, logger: logging.Logger) -> int:
     return 0 if not left else 1
 
 
+def resend_secondary(cfg: dict, logger: logging.Logger, date: str = "") -> int:
+    """Повторная отправка выпуска во второй чат из архива data/digests/digest_<date>.md."""
+    files = sorted(DIGEST_DIR.glob("digest_*.md"))
+    if date:
+        files = [f for f in files if f.stem == f"digest_{date}"]
+    if not files:
+        logger.error("Архив выпуска не найден в %s", DIGEST_DIR)
+        return 2
+    src = files[-1]
+    text = src.read_text(encoding="utf-8")
+    cards: list[list[str]] = []
+    for block in text.split("\n## ")[1:]:
+        lines = block.split("\n")
+        a = Article(title=lines[0].strip())
+        a.title_ru = (lines[1].strip() if len(lines) > 1 else "") or None
+        rest = lines[2:]
+        try:
+            i = next(n for n, l in enumerate(rest) if l.startswith("Ось:"))
+        except StopIteration:
+            i = -1
+        body = rest[i + 1:] if i >= 0 else rest
+        body = [l for l in body]
+        while body and not body[-1].strip():
+            body.pop()
+        link = ""
+        if body and body[-1].strip().startswith("http"):
+            link = body.pop().strip()
+        # первая непустая строка после «Ось:» — библиография NLM
+        while body and not body[0].strip():
+            body.pop(0)
+        if body:
+            body.pop(0)
+        a.abstract_ru = "\n".join(body).strip() or None
+        if link.startswith("https://doi.org/"):
+            a.doi = link[len("https://doi.org/"):]
+        elif "pubmed.ncbi.nlm.nih.gov/" in link:
+            a.pmid = link.rstrip("/").rsplit("/", 1)[-1]
+        else:
+            a.s2_url = link
+        cards.append(secondary_card_messages(a))
+    if not cards:
+        logger.error("В %s нет статей", src.name)
+        return 2
+    with state_lock():
+        q = load_json(SECONDARY_QUEUE_FILE, {})
+        if q.get("cards"):
+            logger.info("В очереди уже есть %d неотправленных карточек — отправляю их", len(q["cards"]))
+        else:
+            save_json(SECONDARY_QUEUE_FILE, {"date": src.stem[7:], "chat": cfg["tg_chat2"], "cards": cards})
+            logger.info("Из %s собрано карточек: %d", src.name, len(cards))
+    return send_secondary_queue(cfg, logger)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
@@ -1184,14 +1237,19 @@ def main() -> int:
     ap.add_argument("--window-days", type=int, default=DEFAULT_WINDOW_DAYS)
     ap.add_argument("--send-secondary", action="store_true",
                     help="отправить во второй чат выпуск, отложенный утренним прогоном")
+    ap.add_argument("--resend-secondary", nargs="?", const="", default=None, metavar="ДАТА",
+                    help="повторно отправить во второй чат выпуск из архива (последний или ГГГГ-ММ-ДД)")
     args = ap.parse_args()
 
     cfg = load_cfg()
-    logger = setup_logging("check" if args.check else ("secondary" if args.send_secondary else "run"))
+    logger = setup_logging("check" if args.check else
+                           ("secondary" if args.send_secondary or args.resend_secondary is not None else "run"))
     if args.check:
         return run_check(cfg, logger)
     if args.send_secondary:
         return send_secondary_queue(cfg, logger)
+    if args.resend_secondary is not None:
+        return resend_secondary(cfg, logger, args.resend_secondary)
 
     logger.info("=== VetDigest v%s (dry_run=%s) ===", VERSION, args.dry_run)
 
