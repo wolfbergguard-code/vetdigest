@@ -1046,6 +1046,9 @@ def tg_send(token: str, chat_id: str, text: str, logger: logging.Logger,
             keyboard: dict | None = None) -> int | None:
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML",
                "disable_web_page_preview": True}
+    thread = os.getenv("SECONDARY_THREAD_ID", "").strip()
+    if thread and str(chat_id) == os.getenv("SECONDARY_CHAT_ID", "").strip():
+        payload["message_thread_id"] = int(thread)
     if keyboard:
         payload["reply_markup"] = keyboard
     data = tg_call(token, "sendMessage", payload, logger)
@@ -1087,8 +1090,10 @@ def run_check(cfg: dict, logger: logging.Logger) -> int:
         r = tg_call(cfg["tg_token"], "getChat", {"chat_id": cid}, logger, retries=1)
         if r:
             c = r["result"]
+            th = os.getenv("SECONDARY_THREAD_ID", "").strip() if name == "tg_chat2" else ""
             print(f"✓ {label}: {cid} ({c.get('type')}, "
-                  f"{c.get('title') or c.get('username') or c.get('first_name')})")
+                  f"{c.get('title') or c.get('username') or c.get('first_name')})"
+                  + (f", тема {th}" if th else ""))
         else:
             print(f"✗ {label}: {cid} недоступен — бот не добавлен или пользователь не нажал /start")
             ok = False
